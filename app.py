@@ -237,12 +237,13 @@ with st.sidebar:
     st.caption("Virtual Acoustic Simulation Environment (3m x 3m x 3m)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "2D Visualization", 
     "3D Visualization", 
     "Material Analysis",
     "Source Configuration",
     "Experimental Data",
+    "Batch Testing",
     "Database Records"
 ])
 
@@ -675,8 +676,299 @@ with tab5:
         else:
             st.info("Upload experimental data to enable comparative analysis.")
 
-# Tab 6: Database Records
+# Tab 6: Batch Testing
 with tab6:
+    st.header("Batch Testing System")
+    
+    st.markdown("""
+    This tab provides tools for batch testing multiple materials and configurations 
+    against experimental data. Run automated tests to find optimal parameters and 
+    compare materials.
+    """)
+    
+    # Import batch testing module
+    try:
+        from utils.batch_testing import BatchTestingSystem
+        batch_system = BatchTestingSystem(st.session_state.simulation, 
+                                      db_handler if db_available else None)
+    except ImportError as e:
+        st.error(f"Error importing batch testing module: {e}")
+        st.stop()
+    
+    # Create tabs for different batch testing functions
+    batch_tab1, batch_tab2, batch_tab3 = st.tabs([
+        "Material Comparison", 
+        "Parameter Optimization",
+        "Batch Report"
+    ])
+    
+    # Tab 1: Material Comparison
+    with batch_tab1:
+        st.subheader("Material Comparison")
+        
+        # Load experimental data
+        with st.spinner("Loading experimental data..."):
+            exp_data = batch_system.load_experimental_data()
+            
+            if not exp_data:
+                st.warning("No experimental data files found. Please add CSV files to the 'experimental_data' directory.")
+                st.stop()
+        
+        # Material selection for comparison
+        st.markdown("### Select Materials to Compare")
+        
+        all_materials = st.session_state.simulation.material_db.get_material_names()
+        selected_materials = st.multiselect(
+            "Materials",
+            options=all_materials,
+            default=[all_materials[0]] if all_materials else []
+        )
+        
+        if not selected_materials:
+            st.warning("Please select at least one material for comparison")
+        else:
+            # Run batch test
+            if st.button("Run Comparison"):
+                with st.spinner("Running batch test..."):
+                    # Create a frequency range for testing
+                    freq_min, freq_max = 50, 1000
+                    frequencies = np.linspace(freq_min, freq_max, 20)
+                    
+                    # Run the batch test
+                    results = batch_system.run_batch_test(
+                        materials=selected_materials,
+                        frequencies=frequencies,
+                        parameters={
+                            'medium': st.session_state.medium,
+                            'reflection_coefficient': st.session_state.reflection_coefficient
+                        }
+                    )
+                    
+                    # Calculate comparison metrics
+                    comparisons = {}
+                    for material in selected_materials:
+                        comparison = batch_system.compare_with_experimental(material)
+                        if "error" not in comparison:
+                            comparisons[material] = comparison
+                        else:
+                            st.warning(f"Could not compare {material}: {comparison['error']}")
+                    
+                    # Display results
+                    if comparisons:
+                        st.success(f"Completed comparison for {len(comparisons)} materials")
+                        
+                        # Create comparison plots
+                        for material, comparison in comparisons.items():
+                            st.markdown(f"### {material}")
+                            
+                            # Create metrics display
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Correlation", f"{comparison['correlation']:.3f}")
+                            with col2:
+                                st.metric("Mean Absolute Error", f"{comparison['mae']:.3f}")
+                            with col3:
+                                st.metric("Mean Squared Error", f"{comparison['mse']:.3f}")
+                            
+                            # Create plot
+                            fig = batch_system.plot_comparison(material)
+                            if fig is not None:
+                                st.pyplot(fig)
+                        
+                        # Create summary table
+                        st.markdown("### Comparison Summary")
+                        summary_data = []
+                        for material, comparison in comparisons.items():
+                            summary_data.append({
+                                'Material': material,
+                                'Correlation': f"{comparison['correlation']:.3f}",
+                                'MAE': f"{comparison['mae']:.3f}",
+                                'MSE': f"{comparison['mse']:.3f}"
+                            })
+                        
+                        summary_df = pd.DataFrame(summary_data)
+                        st.dataframe(summary_df, use_container_width=True)
+                    else:
+                        st.error("No valid comparisons could be made. Check experimental data files.")
+    
+    # Tab 2: Parameter Optimization
+    with batch_tab2:
+        st.subheader("Parameter Optimization")
+        
+        st.markdown("""
+        Find optimal simulation parameters to match experimental data.
+        The system will test multiple parameter combinations to find the best match.
+        """)
+        
+        # Material selection for optimization
+        material_to_optimize = st.selectbox(
+            "Select material to optimize",
+            options=st.session_state.simulation.material_db.get_material_names()
+        )
+        
+        # Define parameter ranges
+        st.markdown("### Parameter Ranges")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            reflection_values = st.multiselect(
+                "Reflection coefficients to test",
+                options=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                default=[0.0, 0.3, 0.6, 0.9]
+            )
+            
+        with col2:
+            medium_values = st.multiselect(
+                "Media to test",
+                options=["air", "water", "wood", "concrete", "steel"],
+                default=["air"]
+            )
+        
+        # Metric selection
+        optimization_metric = st.radio(
+            "Optimization metric",
+            options=["correlation", "mae", "mse"],
+            index=0,
+            horizontal=True
+        )
+        
+        # Run optimization
+        if st.button("Run Optimization"):
+            if not reflection_values or not medium_values:
+                st.warning("Please select at least one value for each parameter")
+            else:
+                with st.spinner("Running parameter optimization..."):
+                    # Ensure experimental data is loaded
+                    batch_system.load_experimental_data()
+                    
+                    # Create parameter ranges dictionary
+                    param_ranges = {
+                        'medium': medium_values,
+                        'reflection_coefficient': reflection_values
+                    }
+                    
+                    # Run optimization
+                    optimization_results = batch_system.optimize_parameters(
+                        material_to_optimize,
+                        param_ranges,
+                        metric=optimization_metric
+                    )
+                    
+                    if "error" in optimization_results:
+                        st.error(f"Optimization failed: {optimization_results['error']}")
+                    else:
+                        st.success("Optimization complete!")
+                        
+                        # Display optimal parameters
+                        st.markdown("### Optimal Parameters")
+                        
+                        opt_params = optimization_results["optimal_parameters"]
+                        metrics = optimization_results["metrics"]
+                        
+                        # Create parameter table
+                        params_df = pd.DataFrame({
+                            'Parameter': list(opt_params.keys()),
+                            'Optimal Value': list(opt_params.values())
+                        })
+                        
+                        st.dataframe(params_df, use_container_width=True)
+                        
+                        # Display metrics
+                        st.markdown("### Performance Metrics")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Correlation", f"{metrics['correlation']:.3f}")
+                        with col2:
+                            st.metric("Mean Absolute Error", f"{metrics['mae']:.3f}")
+                        with col3:
+                            st.metric("Mean Squared Error", f"{metrics['mse']:.3f}")
+                        
+                        # Apply optimal parameters to current simulation
+                        if st.button("Apply Optimal Parameters"):
+                            # Update session state with optimal parameters
+                            if 'medium' in opt_params:
+                                st.session_state.medium = opt_params['medium']
+                            
+                            if 'reflection_coefficient' in opt_params:
+                                st.session_state.reflection_coefficient = opt_params['reflection_coefficient']
+                            
+                            st.session_state.needs_update = True
+                            st.success("Applied optimal parameters to current simulation!")
+                            st.info("Return to other tabs to see the updated simulation results.")
+    
+    # Tab 3: Batch Report
+    with batch_tab3:
+        st.subheader("Batch Testing Report")
+        
+        st.markdown("""
+        Generate a comprehensive report of material performance across different tests.
+        This helps identify the best materials for specific acoustic applications.
+        """)
+        
+        if st.button("Generate Comprehensive Report"):
+            with st.spinner("Running batch tests and generating report..."):
+                # Ensure experimental data is loaded
+                batch_system.load_experimental_data()
+                
+                # Run batch test on all materials
+                all_materials = st.session_state.simulation.material_db.get_material_names()
+                freq_range = np.linspace(50, 1000, 20)
+                
+                # Run with default parameters
+                batch_system.run_batch_test(
+                    materials=all_materials,
+                    frequencies=freq_range,
+                    parameters={
+                        'medium': 'air',
+                        'reflection_coefficient': 0.0
+                    }
+                )
+                
+                # Generate report
+                report_df = batch_system.generate_report()
+                
+                if report_df is not None and not report_df.empty:
+                    st.success("Report generated successfully!")
+                    
+                    # Display the report
+                    st.markdown("### Material Performance Report")
+                    st.dataframe(report_df, use_container_width=True)
+                    
+                    # Create visualization
+                    st.markdown("### Correlation Visualization")
+                    
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    bars = ax.bar(report_df['Material'], report_df['Correlation'], color='skyblue')
+                    ax.set_xlabel('Material')
+                    ax.set_ylabel('Correlation with Experimental Data')
+                    ax.set_title('Material Performance Comparison')
+                    ax.set_ylim(0, 1)
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    plt.xticks(rotation=45, ha='right')
+                    
+                    # Add value labels on top of bars
+                    for bar in bars:
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                               f'{height:.2f}', ha='center', va='bottom')
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # Download option
+                    st.download_button(
+                        label="Download Report CSV",
+                        data=report_df.to_csv(index=False),
+                        file_name="sonares_material_report.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("Could not generate report. Check experimental data and try again.")
+
+# Tab 7: Database Records
+with tab7:
     st.header("Database Records")
     
     st.markdown("""
