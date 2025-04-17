@@ -1,0 +1,119 @@
+Konzept: Theoretischer Resonanzraum für ein Simulations- und Analyseprogramm
+
+Projekttitel: SONARES – Sonic Resonance Evaluation System
+
+Ziel:
+Entwicklung eines theoretischen Raums für ein softwarebasiertes System zur Simulation, Steuerung und Analyse der akustischen Bestrahlung von Materialien unter variabler Richtungs- und Frequenzsteuerung. Ziel ist die Erkennung, Analyse und Visualisierung von Resonanzeffekten auf unterschiedliche Materialtypen.
+
+1. Raumdefinition (virtuell)
+
+Abmessungen: 3m x 3m x 3m (kubisch)
+
+Akustisch isoliert, simuliert mit kontrollierten Reflexions- oder Absorptionsparametern
+
+Koordinatensystem zentriert auf (0,0,0) zur einfachen Quell- und Sensorpositionierung
+
+2. Materialmodul
+
+Datenbank mit folgenden Eigenschaften:
+
+Materialtyp (z. B. Holz, Beton, Lehmziegel, Metall)
+
+Resonanzfrequenz (Hz)
+
+Dichte (kg/m^3)
+
+Dämpfungskoeffizient
+
+Elastizität
+
+Zerstörungsschwelle (optional)
+
+Visualisierung: Materialfläche als 2D- oder 3D-Fläche einsetzbar
+
+3. Quellensystem (akustische Bestrahlung)
+
+Variabel platzierbare Schallquellen (1–32, 64, 128, 256...)
+
+Steuerbar in:
+
+Frequenz (Hz)
+
+Phase (0°–360°)
+
+Timing (ms)
+
+Richtung (XYZ-Position im Raum)
+
+Konfigurationen:
+
+Lineare Anordnung
+
+Kreis-/Kugelgitter
+
+Freie Punktverteilung
+
+4. Interferenz- und Resonanzsimulation
+
+Berechnung des resultierenden Interferenzfeldes im Raum (2D/3D)
+
+Multiplikation mit Materialreaktionsprofil (abhängig von Resonanznähe)
+
+Darstellung:
+
+Heatmaps (XY-Ebenen)
+
+3D-Isosurface der Intensität
+
+Vektorfluss der Energie
+
+5. Sensor- & Analysemodul (virtuell)
+
+Punkte oder Flächen zur Messung der Reaktion:
+
+Vibrationsintensität
+
+Frequenzantwort
+
+Lokale Energieaufnahme
+
+Resonanz-Hotspots
+
+Vergleich mit Sollwerten / Materialbruchmodellen
+
+6. Bedienoberfläche / Kontrollzentrum
+
+Auswahl von Materialien
+
+Steuerung von Frequenzsweeps
+
+Auswahl der Quellrichtungskonfiguration
+
+Start/Pause/Reset der Simulation
+
+Exportfunktionen für Heatmaps, Daten, Parameter-Sets
+
+7. Erweiterungsmodul (Zukunft)
+
+Zeitdynamische Simulation (Live-Aufbau der Resonanzfelder)
+
+KI-Optimierung für Energieeffizienz / Minimalfokus
+
+Multimaterialsysteme (z. B. Holzbalken in Lehmmauer)
+
+Experimenteditor mit Testprotokoll
+
+Anwendungsfelder:
+
+Materialforschung
+
+Bauphysik
+
+Archäoakustik
+
+Strukturprüfung
+
+Akustische Medizin
+
+Vision:
+Ein digitaler Resonanzraum, der wissenschaftlich fundierte Simulationen ermöglicht, reale Versuchsplanung unterstützt und Erkenntnisse über Schallwirkungen auf Materie revolutioniert.
