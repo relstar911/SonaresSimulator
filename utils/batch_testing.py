@@ -374,4 +374,3 @@ class BatchTestingSystem:
             "optimal_parameters": best_params,
             "metrics": best_metrics
         }
-"""
