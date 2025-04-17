@@ -8,7 +8,14 @@ for the SONARES application.
 import numpy as np
 from models.source_configurations import SourceConfiguration
 from models.material_database import MaterialDatabase
-from utils.acoustic_physics import calculate_wave_interference
+from utils.acoustic_physics import calculate_wave_interference, calculate_energy_density, calculate_material_response, calculate_wavelength
+
+# Import database support
+try:
+    from models.database import DatabaseHandler
+    db_available = True
+except ImportError:
+    db_available = False
 
 class AcousticSimulation:
     """Class to handle acoustic simulations in a 3D virtual space."""
@@ -264,3 +271,89 @@ class AcousticSimulation:
             'frequencies': frequencies,
             'responses': np.array(responses)
         }
+        
+    def save_simulation_to_database(self, name, notes=None):
+        """
+        Save the current simulation results to the database.
+        
+        Args:
+            name (str): Name for this simulation record
+            notes (str, optional): Additional notes about this simulation
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not db_available:
+            return False
+            
+        if self.resonance_field is None or self.current_material is None:
+            return False
+            
+        try:
+            db_handler = DatabaseHandler()
+            
+            # Calculate hotspots for database record
+            hotspot_data = self.analyze_hotspots(threshold=0.7)
+            hotspot_count = hotspot_data['count'] if hotspot_data else 0
+            
+            # Get source arrangement info
+            source_count = len(self.source_config.sources)
+            
+            # Get other simulation data
+            medium = getattr(self, 'current_medium', 'air')
+            reflection = getattr(self, 'current_reflection', 0.0)
+            
+            # Max intensity
+            max_intensity = float(np.max(self.resonance_field))
+            
+            # Create simulation record
+            sim_data = {
+                'name': name,
+                'material_name': self.current_material,
+                'frequency': float(self.current_frequency),
+                'source_count': source_count,
+                'source_arrangement': 'custom',  # This could be improved
+                'medium': medium,
+                'reflection_coefficient': float(reflection),
+                'max_intensity': max_intensity,
+                'resonance_factor': float(max_intensity),
+                'resonance_hotspots': hotspot_count,
+                'notes': notes
+            }
+            
+            db_handler.save_simulation_result(sim_data)
+            return True
+        except Exception as e:
+            print(f"Error saving to database: {e}")
+            return False
+            
+    def save_experimental_data_to_database(self, name, data_df, notes=None):
+        """
+        Save experimental data to the database.
+        
+        Args:
+            name (str): Name for this dataset
+            data_df (pd.DataFrame): Pandas DataFrame with experimental data
+            notes (str, optional): Additional notes
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not db_available:
+            return False
+            
+        if self.current_material is None or data_df is None:
+            return False
+            
+        try:
+            db_handler = DatabaseHandler()
+            db_handler.save_experimental_data(
+                name=name,
+                data_df=data_df,
+                material_name=self.current_material,
+                notes=notes
+            )
+            return True
+        except Exception as e:
+            print(f"Error saving experimental data to database: {e}")
+            return False
