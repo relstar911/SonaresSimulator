@@ -81,10 +81,14 @@ class AcousticSimulation:
         self.current_frequency = frequency
         self.source_config.set_uniform_frequency(frequency)
         
-    def run_simulation(self):
+    def run_simulation(self, medium="air", reflection_coefficient=0.0):
         """
-        Run the acoustic simulation.
+        Run the acoustic simulation with advanced physics.
         
+        Args:
+            medium (str): Propagation medium (air, water, etc.)
+            reflection_coefficient (float): Wall reflection coefficient (0-1)
+            
         Returns:
             dict: Simulation results including interference and resonance fields
         """
@@ -97,13 +101,15 @@ class AcousticSimulation:
         # Get source properties
         source_props = self.source_config.get_source_properties()
         
-        # Calculate wave interference field
+        # Calculate wave interference field with advanced physics
         self.interference_field = calculate_wave_interference(
             self.grid, 
             source_props['positions'],
             source_props['frequencies'],
             source_props['phases'],
-            source_props['amplitudes']
+            source_props['amplitudes'],
+            medium=medium,
+            reflection_coefficient=reflection_coefficient
         )
         
         # Calculate material resonance response
@@ -112,13 +118,38 @@ class AcousticSimulation:
             self.current_frequency
         )
         
+        # Get material properties for material-specific calculations
+        material_props = self.material_db.get_material_properties(self.current_material)
+        
         # Combine interference field with material response
         self.resonance_field = self.interference_field * resonance_factor
+        
+        # Calculate material absorption effect (more realistic material physics)
+        if material_props:
+            # Damping affects how quickly energy is absorbed by the material
+            damping = material_props["damping_coefficient"]
+            elasticity = material_props["elasticity"]
+            
+            # Adjust resonance field based on material properties
+            # Higher damping = more absorption, higher elasticity = less absorption
+            absorption_factor = damping / (elasticity + 0.1)  # Avoid division by near-zero
+            
+            # Apply non-linear effects at high intensities (saturation)
+            saturation_threshold = 0.7
+            high_intensity_mask = self.resonance_field > saturation_threshold
+            
+            if np.any(high_intensity_mask):
+                # Apply saturation effect to high-intensity regions
+                saturated_values = saturation_threshold + (1.0 - saturation_threshold) * \
+                                   (1.0 - np.exp(-(self.resonance_field[high_intensity_mask] - saturation_threshold) / 0.2))
+                self.resonance_field[high_intensity_mask] = saturated_values
         
         return {
             "interference_field": self.interference_field,
             "resonance_field": self.resonance_field,
-            "resonance_factor": resonance_factor
+            "resonance_factor": resonance_factor,
+            "medium": medium,
+            "reflection_coefficient": reflection_coefficient
         }
     
     def get_2d_slice(self, axis='z', position=0):

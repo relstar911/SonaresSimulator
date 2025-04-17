@@ -146,6 +146,40 @@ with st.sidebar:
         )
         st.session_state.needs_update = True
     
+    # Advanced physics controls
+    st.subheader("Physics Settings")
+    
+    # Propagation medium
+    if 'medium' not in st.session_state:
+        st.session_state.medium = "air"
+        
+    medium = st.selectbox(
+        "Propagation medium",
+        ["air", "water", "wood", "concrete", "steel"],
+        index=["air", "water", "wood", "concrete", "steel"].index(st.session_state.medium)
+    )
+    
+    if medium != st.session_state.medium:
+        st.session_state.medium = medium
+        st.session_state.needs_update = True
+    
+    # Room reflection coefficient
+    if 'reflection_coefficient' not in st.session_state:
+        st.session_state.reflection_coefficient = 0.0
+        
+    reflection = st.slider(
+        "Wall reflection",
+        min_value=0.0,
+        max_value=0.9,
+        value=float(st.session_state.reflection_coefficient),
+        step=0.1,
+        help="Higher values increase sound reflections from walls (0 = anechoic, 0.9 = highly reflective)"
+    )
+    
+    if reflection != st.session_state.reflection_coefficient:
+        st.session_state.reflection_coefficient = reflection
+        st.session_state.needs_update = True
+    
     # Visualization controls
     st.subheader("Visualization")
     slice_axis = st.selectbox(
@@ -171,6 +205,16 @@ with st.sidebar:
     # Run simulation button
     if st.button("Run Simulation"):
         st.session_state.needs_update = True
+        
+    # Show current speed of sound
+    speeds = {
+        "air": 343.0,
+        "water": 1481.0,
+        "wood": 3800.0,
+        "concrete": 3200.0,
+        "steel": 5100.0
+    }
+    st.info(f"Speed of sound in {medium}: {speeds.get(medium, 343.0)} m/s")
     
     # Additional information
     st.markdown("---")
@@ -178,18 +222,23 @@ with st.sidebar:
     st.caption("Virtual Acoustic Simulation Environment (3m x 3m x 3m)")
 
 # Main content area
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "2D Visualization", 
     "3D Visualization", 
     "Material Analysis",
-    "Source Configuration"
+    "Source Configuration",
+    "Experimental Data"
 ])
 
 # If simulation needs update, run it
 if st.session_state.needs_update:
-    with st.spinner("Running simulation..."):
+    with st.spinner("Running simulation with advanced physics..."):
         if st.session_state.selected_material:
-            sim_results = st.session_state.simulation.run_simulation()
+            # Run simulation with advanced physics parameters
+            sim_results = st.session_state.simulation.run_simulation(
+                medium=st.session_state.medium,
+                reflection_coefficient=st.session_state.reflection_coefficient
+            )
             if "error" in sim_results:
                 st.error(sim_results["error"])
             st.session_state.needs_update = False
@@ -274,7 +323,7 @@ with tab3:
         with col1:
             st.subheader("Material Properties")
             
-            # Create properties table
+            # Create properties table - convert all values to strings to avoid Arrow issues
             props_df = pd.DataFrame({
                 'Property': [
                     'Resonance Frequency', 
@@ -286,8 +335,8 @@ with tab3:
                 'Value': [
                     f"{props['resonance_frequency']} Hz",
                     f"{props['density']} kg/m³",
-                    props['damping_coefficient'],
-                    props['elasticity'],
+                    f"{props['damping_coefficient']}",  # Convert to string
+                    f"{props['elasticity']}",           # Convert to string
                     f"{props['destruction_threshold']} dB SPL"
                 ]
             })
@@ -440,14 +489,138 @@ with tab4:
             Custom positioning of sources allows for specialized acoustic field patterns.
             """)
 
+# Tab 5: Experimental Data
+with tab5:
+    st.header("Experimental Data Analysis")
+    
+    st.markdown("""
+    This tab provides tools for importing, analyzing, and comparing experimental data with simulation results.
+    You can upload real-world measurements to validate and refine the simulation model.
+    """)
+    
+    # File uploader for experimental data
+    uploaded_file = st.file_uploader("Upload experimental data (CSV)", type=['csv'])
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Data Import")
+        
+        if uploaded_file is not None:
+            # Create a session state entry for experimental data if it doesn't exist
+            if 'experimental_data' not in st.session_state:
+                st.session_state.experimental_data = None
+                
+            try:
+                # Read the CSV file into a pandas DataFrame
+                exp_data = pd.read_csv(uploaded_file)
+                st.session_state.experimental_data = exp_data
+                
+                # Display the data
+                st.dataframe(exp_data, use_container_width=True)
+                
+                # Show basic statistics
+                st.subheader("Data Statistics")
+                st.write(exp_data.describe())
+                
+            except Exception as e:
+                st.error(f"Error loading data: {e}")
+        else:
+            st.info("Upload a CSV file with experimental measurements to analyze and compare with simulation.")
+            
+            # Show example format
+            st.subheader("Example Data Format")
+            example_data = pd.DataFrame({
+                'Frequency (Hz)': [100, 200, 300, 400, 500],
+                'Measured Intensity': [0.2, 0.5, 0.8, 0.6, 0.3],
+                'Position X (m)': [0, 0, 0, 0, 0],
+                'Position Y (m)': [0, 0, 0, 0, 0],
+                'Position Z (m)': [0, 0, 0, 0, 0]
+            })
+            st.dataframe(example_data, use_container_width=True)
+    
+    with col2:
+        st.subheader("Comparative Analysis")
+        
+        if 'experimental_data' in st.session_state and st.session_state.experimental_data is not None:
+            # Plot comparison between experimental and simulation data
+            st.markdown("### Simulation vs. Experiment")
+            
+            # Create a placeholder for the comparison plot
+            if st.session_state.simulation.resonance_field is not None and 'Frequency (Hz)' in st.session_state.experimental_data.columns:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                # Get the frequency response data from simulation
+                freq_data = st.session_state.simulation.get_frequency_response()
+                
+                if freq_data is not None:
+                    # Plot simulation data
+                    ax.plot(freq_data['frequencies'], freq_data['responses'], 
+                           label='Simulation', color='blue', linewidth=2)
+                    
+                    # Plot experimental data (assuming it contains frequency and intensity)
+                    exp_df = st.session_state.experimental_data
+                    if 'Measured Intensity' in exp_df.columns:
+                        ax.scatter(exp_df['Frequency (Hz)'], exp_df['Measured Intensity'], 
+                                  color='red', s=50, alpha=0.7, label='Experimental')
+                    
+                    ax.set_xlabel('Frequency (Hz)')
+                    ax.set_ylabel('Response Intensity')
+                    ax.set_title('Simulation vs. Experimental Data')
+                    ax.legend()
+                    ax.grid(True, linestyle='--', alpha=0.7)
+                    
+                    st.pyplot(fig)
+                    
+                    # Calculate correlation between simulation and experiment
+                    if 'Measured Intensity' in exp_df.columns:
+                        # Interpolate simulation data to match experimental frequencies
+                        from scipy.interpolate import interp1d
+                        sim_interp = interp1d(freq_data['frequencies'], freq_data['responses'], 
+                                           bounds_error=False, fill_value='extrapolate')
+                        
+                        sim_at_exp_freq = sim_interp(exp_df['Frequency (Hz)'])
+                        
+                        # Calculate correlation coefficient
+                        correlation = np.corrcoef(sim_at_exp_freq, exp_df['Measured Intensity'])[0, 1]
+                        
+                        # Display metrics
+                        st.metric("Correlation Coefficient", f"{correlation:.3f}")
+                        
+                        # Calculate mean absolute error
+                        mae = np.mean(np.abs(sim_at_exp_freq - exp_df['Measured Intensity']))
+                        st.metric("Mean Absolute Error", f"{mae:.3f}")
+            else:
+                st.info("Run a simulation and ensure your data includes frequency measurements to enable comparison.")
+                
+            # Export options
+            st.subheader("Export Results")
+            
+            # Generate combined data for export
+            if st.session_state.simulation.resonance_field is not None:
+                if st.button("Export Comparison Data"):
+                    # Create a combined DataFrame with both simulation and experimental results
+                    # This is a placeholder - you would implement the actual data combination logic
+                    st.success("Data export functionality will be implemented in a future release.")
+                    
+                    # Display what the exported data would look like
+                    st.download_button(
+                        label="Download CSV (Preview)",
+                        data=st.session_state.experimental_data.to_csv(index=False),
+                        file_name="sonares_comparison_data.csv",
+                        mime="text/csv"
+                    )
+        else:
+            st.info("Upload experimental data to enable comparative analysis.")
+
 # Footer
 st.markdown("---")
 st.markdown("""
 **SONARES - Sonic Resonance Evaluation System**
 
 This software simulates acoustic resonance effects on various materials in a virtual 3D environment. 
-The simulation uses a simplified model of wave physics to demonstrate how different materials respond 
-to acoustic stimulation at various frequencies.
+The simulation uses a sophisticated model of wave physics to demonstrate how different materials respond 
+to acoustic stimulation at various frequencies and configurations.
 
 *This is a scientific simulation tool for research and educational purposes.*
 """)

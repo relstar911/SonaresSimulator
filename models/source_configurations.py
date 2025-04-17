@@ -13,6 +13,8 @@ class SourceArrangement(Enum):
     LINEAR = "Linear"
     CIRCULAR = "Circular"
     SPHERICAL = "Spherical"
+    GRID = "3D Grid"
+    PLANAR = "2D Plane"
     CUSTOM = "Custom Points"
 
 class SourceConfiguration:
@@ -53,6 +55,10 @@ class SourceConfiguration:
             self._generate_circular_arrangement(count, params)
         elif arrangement == SourceArrangement.SPHERICAL:
             self._generate_spherical_arrangement(count, params)
+        elif arrangement == SourceArrangement.GRID:
+            self._generate_grid_arrangement(count, params)
+        elif arrangement == SourceArrangement.PLANAR:
+            self._generate_planar_arrangement(count, params)
         elif arrangement == SourceArrangement.CUSTOM:
             # Custom arrangement handled separately through add_source method
             pass
@@ -242,3 +248,118 @@ class SourceConfiguration:
         """
         for source in self.sources:
             source['amplitude'] = amplitude
+            
+    def _generate_grid_arrangement(self, count, params):
+        """
+        Generate sources in a 3D grid arrangement.
+        
+        Args:
+            count (int): Number of sources
+            params (dict): Parameters including dimensions and spacing
+        """
+        # Get grid dimensions (trying to keep the total close to count)
+        total_points = count
+        
+        # Calculate dimensions for a roughly cubic grid
+        dim = round(total_points ** (1/3))
+        nx = dim
+        ny = dim
+        nz = max(1, round(total_points / (nx * ny)))
+        
+        # Adjust to match requested count as closely as possible
+        while nx * ny * nz > count and nx > 1:
+            nx -= 1
+        while nx * ny * nz > count and ny > 1:
+            ny -= 1
+        while nx * ny * nz > count and nz > 1:
+            nz -= 1
+            
+        # Center of the grid
+        center = np.array(params.get('center', [0, 0, 0]))
+        
+        # Spacing between points
+        spacing = params.get('spacing', 0.5)
+        
+        # Size of the grid
+        size_x = (nx - 1) * spacing
+        size_y = (ny - 1) * spacing
+        size_z = (nz - 1) * spacing
+        
+        # Starting position (bottom left corner)
+        start = center - np.array([size_x / 2, size_y / 2, size_z / 2])
+        
+        # Create the grid
+        source_id = 0
+        for i in range(nx):
+            for j in range(ny):
+                for k in range(nz):
+                    if source_id < count:
+                        position = start + np.array([i * spacing, j * spacing, k * spacing])
+                        self.add_source(position, source_id)
+                        source_id += 1
+    
+    def _generate_planar_arrangement(self, count, params):
+        """
+        Generate sources in a 2D planar arrangement.
+        
+        Args:
+            count (int): Number of sources
+            params (dict): Parameters including plane, center and dimensions
+        """
+        # Which plane to use (xy, xz, yz)
+        plane = params.get('plane', 'xy')
+        
+        # Calculate dimensions for a roughly square grid
+        dim = round(count ** 0.5)
+        nx = dim
+        ny = dim
+        
+        # Adjust to match requested count as closely as possible
+        while nx * ny > count and nx > 1:
+            nx -= 1
+        
+        # Center of the plane
+        center = np.array(params.get('center', [0, 0, 0]))
+        
+        # Spacing between points
+        spacing = params.get('spacing', 0.5)
+        
+        # Size of the plane
+        size_1 = (nx - 1) * spacing
+        size_2 = (ny - 1) * spacing
+        
+        # Create the grid based on the plane
+        source_id = 0
+        
+        if plane == 'xy':
+            # Starting position (bottom left corner)
+            start = center - np.array([size_1 / 2, size_2 / 2, 0])
+            
+            for i in range(nx):
+                for j in range(ny):
+                    if source_id < count:
+                        position = start + np.array([i * spacing, j * spacing, 0])
+                        self.add_source(position, source_id)
+                        source_id += 1
+                        
+        elif plane == 'xz':
+            # Starting position (bottom left corner)
+            start = center - np.array([size_1 / 2, 0, size_2 / 2])
+            
+            for i in range(nx):
+                for j in range(ny):
+                    if source_id < count:
+                        position = start + np.array([i * spacing, 0, j * spacing])
+                        self.add_source(position, source_id)
+                        source_id += 1
+                        
+        elif plane == 'yz':
+            # Starting position (bottom left corner)
+            start = center - np.array([0, size_1 / 2, size_2 / 2])
+            
+            for i in range(nx):
+                for j in range(ny):
+                    if source_id < count:
+                        position = start + np.array([0, i * spacing, j * spacing])
+                        self.add_source(position, source_id)
+                        source_id += 1
