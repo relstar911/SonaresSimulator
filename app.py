@@ -514,46 +514,92 @@ with tab5:
     You can upload real-world measurements to validate and refine the simulation model.
     """)
     
-    # File uploader for experimental data
-    uploaded_file = st.file_uploader("Upload experimental data (CSV)", type=['csv'])
+    # Experimental data options
+    data_source = st.radio(
+        "Data Source",
+        ["Preset Experimental Data", "Upload Custom Data"],
+        index=0
+    )
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Data Import")
         
-        if uploaded_file is not None:
+        if data_source == "Preset Experimental Data":
             # Create a session state entry for experimental data if it doesn't exist
             if 'experimental_data' not in st.session_state:
                 st.session_state.experimental_data = None
                 
-            try:
-                # Read the CSV file into a pandas DataFrame
-                exp_data = pd.read_csv(uploaded_file)
-                st.session_state.experimental_data = exp_data
-                
-                # Display the data
-                st.dataframe(exp_data, use_container_width=True)
-                
-                # Show basic statistics
-                st.subheader("Data Statistics")
-                st.write(exp_data.describe())
-                
-            except Exception as e:
-                st.error(f"Error loading data: {e}")
-        else:
-            st.info("Upload a CSV file with experimental measurements to analyze and compare with simulation.")
+            # Get list of experimental data files
+            import glob
+            exp_data_files = glob.glob("experimental_data/*.csv")
+            exp_data_files = [os.path.basename(f) for f in exp_data_files]
             
-            # Show example format
-            st.subheader("Example Data Format")
-            example_data = pd.DataFrame({
-                'Frequency (Hz)': [100, 200, 300, 400, 500],
-                'Measured Intensity': [0.2, 0.5, 0.8, 0.6, 0.3],
-                'Position X (m)': [0, 0, 0, 0, 0],
-                'Position Y (m)': [0, 0, 0, 0, 0],
-                'Position Z (m)': [0, 0, 0, 0, 0]
-            })
-            st.dataframe(example_data, use_container_width=True)
+            if exp_data_files:
+                # Format the display names
+                display_names = [f.replace("_", " ").replace(".csv", "") for f in exp_data_files]
+                file_dict = dict(zip(display_names, exp_data_files))
+                
+                selected_data = st.selectbox(
+                    "Select experimental dataset",
+                    options=list(file_dict.keys()),
+                    index=0
+                )
+                
+                if selected_data:
+                    try:
+                        filepath = os.path.join("experimental_data", file_dict[selected_data])
+                        exp_data = pd.read_csv(filepath)
+                        st.session_state.experimental_data = exp_data
+                        
+                        # Display the data
+                        st.dataframe(exp_data, use_container_width=True)
+                        
+                        # Show basic statistics
+                        st.subheader("Data Statistics")
+                        st.write(exp_data.describe())
+                        
+                    except Exception as e:
+                        st.error(f"Error loading data: {e}")
+            else:
+                st.warning("No experimental data files found in 'experimental_data' directory.")
+        
+        elif data_source == "Upload Custom Data":
+            uploaded_file = st.file_uploader("Upload experimental data (CSV)", type=['csv'])
+            
+            if uploaded_file is not None:
+                # Create a session state entry for experimental data if it doesn't exist
+                if 'experimental_data' not in st.session_state:
+                    st.session_state.experimental_data = None
+                    
+                try:
+                    # Read the CSV file into a pandas DataFrame
+                    exp_data = pd.read_csv(uploaded_file)
+                    st.session_state.experimental_data = exp_data
+                    
+                    # Display the data
+                    st.dataframe(exp_data, use_container_width=True)
+                    
+                    # Show basic statistics
+                    st.subheader("Data Statistics")
+                    st.write(exp_data.describe())
+                    
+                except Exception as e:
+                    st.error(f"Error loading data: {e}")
+            else:
+                st.info("Upload a CSV file with experimental measurements to analyze and compare with simulation.")
+                
+                # Show example format
+                st.subheader("Example Data Format")
+                example_data = pd.DataFrame({
+                    'Frequency (Hz)': [100, 200, 300, 400, 500],
+                    'Measured Intensity': [0.2, 0.5, 0.8, 0.6, 0.3],
+                    'Position X (m)': [0, 0, 0, 0, 0],
+                    'Position Y (m)': [0, 0, 0, 0, 0],
+                    'Position Z (m)': [0, 0, 0, 0, 0]
+                })
+                st.dataframe(example_data, use_container_width=True)
     
     with col2:
         st.subheader("Comparative Analysis")
