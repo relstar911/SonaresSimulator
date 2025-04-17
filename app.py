@@ -1,0 +1,457 @@
+"""
+SONARES - Sonic Resonance Evaluation System
+
+A scientific simulation tool for acoustic resonance analysis of materials 
+in a controlled virtual environment.
+"""
+
+import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from models.acoustic_simulation import AcousticSimulation
+from models.source_configurations import SourceArrangement
+from utils.visualization import (
+    create_2d_heatmap,
+    create_3d_visualization,
+    plot_frequency_response,
+    plot_hotspot_analysis
+)
+
+# Set page configuration
+st.set_page_config(
+    page_title="SONARES - Sonic Resonance Evaluation System",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Initialize session state
+if 'simulation' not in st.session_state:
+    st.session_state.simulation = AcousticSimulation()
+    
+if 'selected_material' not in st.session_state:
+    st.session_state.selected_material = None
+    
+if 'selected_frequency' not in st.session_state:
+    st.session_state.selected_frequency = 440.0  # Default to A4 (440 Hz)
+    
+if 'source_arrangement' not in st.session_state:
+    st.session_state.source_arrangement = SourceArrangement.CIRCULAR
+    
+if 'source_count' not in st.session_state:
+    st.session_state.source_count = 8
+    
+if 'needs_update' not in st.session_state:
+    st.session_state.needs_update = True
+    
+if 'slice_axis' not in st.session_state:
+    st.session_state.slice_axis = 'z'
+    
+if 'slice_position' not in st.session_state:
+    st.session_state.slice_position = 0.0
+
+# Main title
+st.title("SONARES - Sonic Resonance Evaluation System")
+st.markdown("""
+A scientific simulation tool for acoustic resonance analysis of materials 
+in a controlled virtual environment.
+""")
+
+# Create page layout with sidebar and main content
+with st.sidebar:
+    st.header("Simulation Controls")
+    
+    # Material selection
+    st.subheader("Material")
+    material_names = st.session_state.simulation.material_db.get_material_names()
+    selected_material = st.selectbox(
+        "Select material",
+        material_names,
+        index=0
+    )
+    
+    if selected_material != st.session_state.selected_material:
+        st.session_state.selected_material = selected_material
+        st.session_state.simulation.set_material(selected_material)
+        st.session_state.needs_update = True
+    
+    # Frequency control
+    st.subheader("Acoustic Parameters")
+    freq_min, freq_max = 20, 2000
+    selected_frequency = st.slider(
+        "Frequency (Hz)",
+        min_value=freq_min,
+        max_value=freq_max,
+        value=int(st.session_state.selected_frequency),
+        step=5
+    )
+    
+    if selected_frequency != st.session_state.selected_frequency:
+        st.session_state.selected_frequency = selected_frequency
+        st.session_state.simulation.set_frequency(selected_frequency)
+        st.session_state.needs_update = True
+    
+    # Source configuration
+    st.subheader("Source Configuration")
+    source_arrangement = st.selectbox(
+        "Arrangement",
+        [arrangement.value for arrangement in SourceArrangement],
+        index=[arr.value for arr in SourceArrangement].index(st.session_state.source_arrangement.value)
+    )
+    
+    source_count = st.slider(
+        "Number of sources",
+        min_value=1,
+        max_value=32,
+        value=st.session_state.source_count,
+        step=1
+    )
+    
+    # Check if source configuration changed
+    arrangement_changed = (
+        source_arrangement != st.session_state.source_arrangement.value or
+        source_count != st.session_state.source_count
+    )
+    
+    if arrangement_changed:
+        st.session_state.source_arrangement = next(
+            arr for arr in SourceArrangement if arr.value == source_arrangement
+        )
+        st.session_state.source_count = source_count
+        
+        # Generate new source configuration
+        params = {}
+        if st.session_state.source_arrangement == SourceArrangement.LINEAR:
+            params = {
+                'start_point': [-1.2, 0, 0],
+                'end_point': [1.2, 0, 0]
+            }
+        elif st.session_state.source_arrangement == SourceArrangement.CIRCULAR:
+            params = {
+                'center': [0, 0, 0],
+                'radius': 1.2,
+                'axis': 'z'
+            }
+        elif st.session_state.source_arrangement == SourceArrangement.SPHERICAL:
+            params = {
+                'center': [0, 0, 0],
+                'radius': 1.2
+            }
+            
+        st.session_state.simulation.source_config.generate_sources(
+            st.session_state.source_arrangement,
+            st.session_state.source_count,
+            params
+        )
+        st.session_state.needs_update = True
+    
+    # Visualization controls
+    st.subheader("Visualization")
+    slice_axis = st.selectbox(
+        "Slice axis",
+        ['x', 'y', 'z'],
+        index=['x', 'y', 'z'].index(st.session_state.slice_axis)
+    )
+    
+    slice_position = st.slider(
+        "Slice position (m)",
+        min_value=-1.5,
+        max_value=1.5,
+        value=float(st.session_state.slice_position),
+        step=0.1
+    )
+    
+    if (slice_axis != st.session_state.slice_axis or 
+        slice_position != st.session_state.slice_position):
+        st.session_state.slice_axis = slice_axis
+        st.session_state.slice_position = slice_position
+        st.session_state.needs_update = True
+    
+    # Run simulation button
+    if st.button("Run Simulation"):
+        st.session_state.needs_update = True
+    
+    # Additional information
+    st.markdown("---")
+    st.caption("SONARES - Sonic Resonance Evaluation System")
+    st.caption("Virtual Acoustic Simulation Environment (3m x 3m x 3m)")
+
+# Main content area
+tab1, tab2, tab3, tab4 = st.tabs([
+    "2D Visualization", 
+    "3D Visualization", 
+    "Material Analysis",
+    "Source Configuration"
+])
+
+# If simulation needs update, run it
+if st.session_state.needs_update:
+    with st.spinner("Running simulation..."):
+        if st.session_state.selected_material:
+            sim_results = st.session_state.simulation.run_simulation()
+            if "error" in sim_results:
+                st.error(sim_results["error"])
+            st.session_state.needs_update = False
+        else:
+            st.warning("Please select a material")
+
+# Tab 1: 2D Visualization
+with tab1:
+    st.header("2D Acoustic Field Visualization")
+    
+    # Get 2D slice for visualization
+    slice_data = st.session_state.simulation.get_2d_slice(
+        axis=st.session_state.slice_axis,
+        position=st.session_state.slice_position
+    )
+    
+    # Create heatmap
+    if slice_data is not None:
+        heatmap = create_2d_heatmap(
+            slice_data, 
+            title=f"Acoustic Field ({st.session_state.slice_axis.upper()}-Slice at {st.session_state.slice_position:.1f}m)"
+        )
+        st.pyplot(heatmap)
+    else:
+        st.info("Run the simulation to see the 2D visualization")
+    
+    # Display explanation
+    st.markdown("""
+    ### 2D Visualization Details
+    
+    This view shows a 2D slice of the acoustic field in the virtual room. The colors represent:
+    - **Dark blue**: Low acoustic intensity
+    - **Yellow/Orange**: Medium acoustic intensity
+    - **Red**: High acoustic intensity (potential resonance areas)
+    
+    Areas of high intensity (red) indicate where the material may experience the strongest resonance effects.
+    """)
+
+# Tab 2: 3D Visualization
+with tab2:
+    st.header("3D Acoustic Field Visualization")
+    
+    # Add threshold slider for 3D visualization
+    threshold = st.slider(
+        "Isosurface threshold",
+        min_value=0.1,
+        max_value=0.9,
+        value=0.5,
+        step=0.05
+    )
+    
+    # Create 3D visualization
+    fig_3d = create_3d_visualization(st.session_state.simulation, threshold)
+    st.plotly_chart(fig_3d, use_container_width=True)
+    
+    # Display explanation
+    st.markdown("""
+    ### 3D Visualization Details
+    
+    This interactive 3D view shows:
+    - **Isosurfaces**: Regions of equal acoustic intensity
+    - **White points**: Sound sources
+    - **Color gradient**: Represents intensity (blue to red)
+    
+    You can:
+    - **Rotate**: Click and drag
+    - **Zoom**: Scroll wheel
+    - **Pan**: Right-click and drag
+    """)
+
+# Tab 3: Material Analysis
+with tab3:
+    st.header("Material Analysis")
+    
+    material = st.session_state.selected_material
+    if material:
+        # Material properties
+        props = st.session_state.simulation.material_db.get_material_properties(material)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Material Properties")
+            
+            # Create properties table
+            props_df = pd.DataFrame({
+                'Property': [
+                    'Resonance Frequency', 
+                    'Density', 
+                    'Damping Coefficient',
+                    'Elasticity',
+                    'Destruction Threshold'
+                ],
+                'Value': [
+                    f"{props['resonance_frequency']} Hz",
+                    f"{props['density']} kg/m³",
+                    props['damping_coefficient'],
+                    props['elasticity'],
+                    f"{props['destruction_threshold']} dB SPL"
+                ]
+            })
+            
+            st.dataframe(props_df, use_container_width=True)
+            
+            # Frequency response curve
+            st.subheader("Frequency Response")
+            freq_data = st.session_state.simulation.get_frequency_response()
+            freq_fig = plot_frequency_response(freq_data, material)
+            st.pyplot(freq_fig)
+        
+        with col2:
+            st.subheader("Resonance Analysis")
+            
+            # Hotspot analysis
+            hotspot_threshold = st.slider(
+                "Hotspot detection threshold",
+                min_value=0.3,
+                max_value=0.9,
+                value=0.7,
+                step=0.05
+            )
+            
+            # Only run hotspot analysis if simulation has been run
+            if st.session_state.simulation.resonance_field is not None:
+                hotspot_data = st.session_state.simulation.analyze_hotspots(hotspot_threshold)
+                
+                # Display hotspot summary
+                if hotspot_data["count"] > 0:
+                    st.success(f"Detected {hotspot_data['count']} resonance hotspots")
+                    st.metric("Maximum Resonance Intensity", f"{hotspot_data['max_intensity']:.3f}")
+                    
+                    # Plot hotspots
+                    hotspot_fig = plot_hotspot_analysis(hotspot_data, material)
+                    st.pyplot(hotspot_fig)
+                else:
+                    st.info("No resonance hotspots detected at the current threshold")
+            else:
+                st.info("Run the simulation to see resonance analysis")
+    else:
+        st.info("Select a material to see analysis")
+
+# Tab 4: Source Configuration
+with tab4:
+    st.header("Acoustic Source Configuration")
+    
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        st.subheader("Source Positions")
+        
+        # Get source positions
+        source_positions = st.session_state.simulation.source_config.get_source_positions()
+        
+        if len(source_positions) > 0:
+            # Create source position table
+            source_df = pd.DataFrame(
+                source_positions,
+                columns=["X (m)", "Y (m)", "Z (m)"]
+            )
+            source_df.index.name = "Source #"
+            source_df.index = source_df.index + 1  # 1-based indexing
+            
+            st.dataframe(source_df, use_container_width=True)
+            
+            # Plot source positions in 2D slices
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+            
+            # Define plane limits
+            limits = [-1.5, 1.5]
+            
+            # XY plane (z = 0)
+            axes[0].scatter(source_positions[:, 0], source_positions[:, 1], c='red', s=50)
+            axes[0].set_xlabel('X (m)')
+            axes[0].set_ylabel('Y (m)')
+            axes[0].set_title('XY Plane View')
+            axes[0].grid(True)
+            axes[0].set_xlim(limits)
+            axes[0].set_ylim(limits)
+            axes[0].set_aspect('equal')
+            
+            # XZ plane (y = 0)
+            axes[1].scatter(source_positions[:, 0], source_positions[:, 2], c='green', s=50)
+            axes[1].set_xlabel('X (m)')
+            axes[1].set_ylabel('Z (m)')
+            axes[1].set_title('XZ Plane View')
+            axes[1].grid(True)
+            axes[1].set_xlim(limits)
+            axes[1].set_ylim(limits)
+            axes[1].set_aspect('equal')
+            
+            # YZ plane (x = 0)
+            axes[2].scatter(source_positions[:, 1], source_positions[:, 2], c='blue', s=50)
+            axes[2].set_xlabel('Y (m)')
+            axes[2].set_ylabel('Z (m)')
+            axes[2].set_title('YZ Plane View')
+            axes[2].grid(True)
+            axes[2].set_xlim(limits)
+            axes[2].set_ylim(limits)
+            axes[2].set_aspect('equal')
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+        else:
+            st.info("No sources configured. Add sources in the sidebar.")
+    
+    with col2:
+        st.subheader("Configuration Details")
+        
+        # Display configuration details
+        st.markdown(f"""
+        **Source arrangement:** {st.session_state.source_arrangement.value}  
+        **Number of sources:** {st.session_state.source_count}  
+        **Operating frequency:** {st.session_state.selected_frequency} Hz  
+        
+        **Wavelength in air:** {343 / st.session_state.selected_frequency:.2f} m
+        
+        Adjust source configuration in the sidebar to control the acoustic field pattern.
+        """)
+        
+        # Arrangement-specific explanations
+        st.subheader("Arrangement Description")
+        
+        if st.session_state.source_arrangement == SourceArrangement.LINEAR:
+            st.markdown("""
+            **Linear Arrangement**
+            
+            Sources are arranged in a straight line along the X-axis. This configuration is 
+            useful for creating plane wave patterns and directional sound fields.
+            """)
+        elif st.session_state.source_arrangement == SourceArrangement.CIRCULAR:
+            st.markdown("""
+            **Circular Arrangement**
+            
+            Sources are arranged in a circle on the XY plane. This configuration creates
+            convergent wave patterns and is useful for focusing acoustic energy.
+            """)
+        elif st.session_state.source_arrangement == SourceArrangement.SPHERICAL:
+            st.markdown("""
+            **Spherical Arrangement**
+            
+            Sources are distributed on a spherical surface. This creates a more uniform
+            3D sound field and allows for omnidirectional focusing.
+            """)
+        elif st.session_state.source_arrangement == SourceArrangement.CUSTOM:
+            st.markdown("""
+            **Custom Arrangement**
+            
+            Custom positioning of sources allows for specialized acoustic field patterns.
+            """)
+
+# Footer
+st.markdown("---")
+st.markdown("""
+**SONARES - Sonic Resonance Evaluation System**
+
+This software simulates acoustic resonance effects on various materials in a virtual 3D environment. 
+The simulation uses a simplified model of wave physics to demonstrate how different materials respond 
+to acoustic stimulation at various frequencies.
+
+*This is a scientific simulation tool for research and educational purposes.*
+""")
+
+# Display status message
+if st.session_state.needs_update:
+    st.warning("Simulation parameters changed. Click 'Run Simulation' to update visualizations.")
