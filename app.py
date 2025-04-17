@@ -9,6 +9,9 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
+import json
+from datetime import datetime
 
 from models.acoustic_simulation import AcousticSimulation
 from models.source_configurations import SourceArrangement
@@ -18,6 +21,18 @@ from utils.visualization import (
     plot_frequency_response,
     plot_hotspot_analysis
 )
+
+# Check if database functionality is available
+try:
+    from models.database import DatabaseHandler
+    db_available = True
+    db_handler = DatabaseHandler()
+except ImportError as e:
+    db_available = False
+    print(f"Database import error: {e}")
+except Exception as e:
+    db_available = False
+    print(f"Database connection error: {e}")
 
 # Set page configuration
 st.set_page_config(
