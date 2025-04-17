@@ -237,12 +237,13 @@ with st.sidebar:
     st.caption("Virtual Acoustic Simulation Environment (3m x 3m x 3m)")
 
 # Main content area
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "2D Visualization", 
     "3D Visualization", 
     "Material Analysis",
     "Source Configuration",
-    "Experimental Data"
+    "Experimental Data",
+    "Database Records"
 ])
 
 # If simulation needs update, run it
@@ -627,6 +628,201 @@ with tab5:
                     )
         else:
             st.info("Upload experimental data to enable comparative analysis.")
+
+# Tab 6: Database Records
+with tab6:
+    st.header("Database Records")
+    
+    st.markdown("""
+    This tab provides access to the database of saved simulation results and experimental data.
+    Build your empirical foundation by storing, comparing, and analyzing multiple simulations.
+    """)
+    
+    # Check if database is available
+    if db_available:
+        # Create tabs for different record types
+        db_tab1, db_tab2, db_tab3 = st.tabs([
+            "Simulation Records", 
+            "Experimental Data",
+            "Save Current Simulation"
+        ])
+        
+        # Tab for viewing simulation records
+        with db_tab1:
+            st.subheader("Simulation Records")
+            
+            try:
+                # Get simulation records from database
+                simulation_records = db_handler.get_simulation_results(limit=50)
+                
+                if simulation_records and len(simulation_records) > 0:
+                    # Convert records to dataframe for display
+                    records_data = []
+                    for record in simulation_records:
+                        records_data.append({
+                            'ID': record.id,
+                            'Name': record.name,
+                            'Material': record.material_name,
+                            'Frequency (Hz)': record.frequency,
+                            'Sources': record.source_count,
+                            'Max Intensity': f"{record.max_intensity:.3f}",
+                            'Medium': record.medium,
+                            'Date': record.created_at.strftime('%Y-%m-%d %H:%M')
+                        })
+                    
+                    # Create dataframe and display
+                    records_df = pd.DataFrame(records_data)
+                    st.dataframe(records_df, use_container_width=True)
+                    
+                    # Add functionality to view details of a specific record
+                    selected_record_id = st.selectbox(
+                        "Select a record to view details",
+                        [record.id for record in simulation_records],
+                        format_func=lambda x: f"Record #{x}"
+                    )
+                    
+                    if selected_record_id:
+                        # Find the selected record
+                        selected_record = next((r for r in simulation_records if r.id == selected_record_id), None)
+                        
+                        if selected_record:
+                            st.subheader(f"Record Details: {selected_record.name}")
+                            
+                            # Display record details
+                            st.json({
+                                'Material': selected_record.material_name,
+                                'Frequency': selected_record.frequency,
+                                'Source Count': selected_record.source_count,
+                                'Source Arrangement': selected_record.source_arrangement,
+                                'Medium': selected_record.medium,
+                                'Reflection Coefficient': selected_record.reflection_coefficient,
+                                'Maximum Intensity': selected_record.max_intensity,
+                                'Resonance Factor': selected_record.resonance_factor,
+                                'Resonance Hotspots': selected_record.resonance_hotspots,
+                                'Notes': selected_record.notes if selected_record.notes else "None",
+                                'Created': selected_record.created_at.strftime('%Y-%m-%d %H:%M:%S')
+                            })
+                else:
+                    st.info("No simulation records in the database. Save a simulation to get started.")
+            except Exception as e:
+                st.error(f"Error retrieving database records: {e}")
+        
+        # Tab for viewing experimental data records
+        with db_tab2:
+            st.subheader("Experimental Data Records")
+            
+            try:
+                # Get experimental data records from database
+                exp_records = db_handler.get_experimental_data(limit=50)
+                
+                if exp_records and len(exp_records) > 0:
+                    # Convert records to dataframe for display
+                    exp_data = []
+                    for record in exp_records:
+                        exp_data.append({
+                            'ID': record.id,
+                            'Name': record.name,
+                            'Material': record.material_name,
+                            'Frequency Range': f"{record.frequency_range_min if record.frequency_range_min else 'N/A'} - {record.frequency_range_max if record.frequency_range_max else 'N/A'} Hz",
+                            'Data Points': record.data_points,
+                            'Date': record.created_at.strftime('%Y-%m-%d %H:%M')
+                        })
+                    
+                    # Create dataframe and display
+                    exp_df = pd.DataFrame(exp_data)
+                    st.dataframe(exp_df, use_container_width=True)
+                    
+                    # Add functionality to view details of a specific experimental record
+                    selected_exp_id = st.selectbox(
+                        "Select experimental data to view",
+                        [record.id for record in exp_records],
+                        format_func=lambda x: f"Experiment #{x}"
+                    )
+                    
+                    if selected_exp_id:
+                        # Get the data as a dataframe
+                        exp_df = db_handler.get_experimental_data_as_df(selected_exp_id)
+                        
+                        if exp_df is not None:
+                            st.subheader("Experimental Data")
+                            st.dataframe(exp_df, use_container_width=True)
+                            
+                            # Plot the data if it contains frequency information
+                            if 'Frequency (Hz)' in exp_df.columns and 'Measured Intensity' in exp_df.columns:
+                                st.subheader("Data Visualization")
+                                fig, ax = plt.subplots(figsize=(10, 6))
+                                ax.plot(exp_df['Frequency (Hz)'], exp_df['Measured Intensity'], 
+                                       marker='o', linestyle='-', color='green')
+                                ax.set_xlabel('Frequency (Hz)')
+                                ax.set_ylabel('Measured Intensity')
+                                ax.set_title('Experimental Data')
+                                ax.grid(True, linestyle='--', alpha=0.7)
+                                st.pyplot(fig)
+                        else:
+                            st.warning("Could not load experimental data")
+                else:
+                    st.info("No experimental data records in the database. Upload and save experimental data to get started.")
+            except Exception as e:
+                st.error(f"Error retrieving experimental data: {e}")
+        
+        # Tab for saving current simulation
+        with db_tab3:
+            st.subheader("Save Current Simulation")
+            
+            # Form for saving the current simulation
+            with st.form(key='save_simulation_form'):
+                simulation_name = st.text_input("Simulation Name", 
+                                              value=f"Simulation - {st.session_state.selected_material} at {st.session_state.selected_frequency}Hz")
+                
+                simulation_notes = st.text_area("Notes", 
+                                              placeholder="Enter any notes about this simulation...")
+                
+                save_button = st.form_submit_button("Save to Database")
+                
+                if save_button:
+                    if st.session_state.simulation.resonance_field is not None:
+                        # Attempt to save the simulation
+                        success = st.session_state.simulation.save_simulation_to_database(
+                            name=simulation_name,
+                            notes=simulation_notes
+                        )
+                        
+                        if success:
+                            st.success("Simulation successfully saved to database!")
+                        else:
+                            st.error("Error saving simulation to database. Check logs for details.")
+                    else:
+                        st.warning("Run a simulation before saving.")
+            
+            # Section for saving experimental data
+            st.subheader("Save Experimental Data")
+            
+            if 'experimental_data' in st.session_state and st.session_state.experimental_data is not None:
+                with st.form(key='save_experimental_form'):
+                    exp_name = st.text_input("Dataset Name", 
+                                           value=f"Experiment - {st.session_state.selected_material}")
+                    
+                    exp_notes = st.text_area("Notes", 
+                                          placeholder="Enter any notes about this experimental data...")
+                    
+                    exp_save_button = st.form_submit_button("Save to Database")
+                    
+                    if exp_save_button:
+                        # Attempt to save the experimental data
+                        success = st.session_state.simulation.save_experimental_data_to_database(
+                            name=exp_name,
+                            data_df=st.session_state.experimental_data,
+                            notes=exp_notes
+                        )
+                        
+                        if success:
+                            st.success("Experimental data successfully saved to database!")
+                        else:
+                            st.error("Error saving experimental data. Check logs for details.")
+            else:
+                st.info("Upload experimental data before saving to the database.")
+    else:
+        st.warning("Database functionality is not available. Check your database configuration.")
 
 # Footer
 st.markdown("---")
