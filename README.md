@@ -32,13 +32,37 @@ SONARES ermöglicht die umfassende Charakterisierung von Materialien durch forts
 
 2. Abhängigkeiten installieren:
    ```
-   pip install -r requirements.txt
+   pip install -r dependencies.txt
    ```
+   
+   Hinweis: Die Datei `dependencies.txt` enthält alle erforderlichen Pakete für dieses Projekt.
 
 3. Anwendung starten:
    ```
    streamlit run app.py
    ```
+
+## Projektstruktur
+
+- `app.py`: Hauptanwendungsdatei mit der Streamlit-Benutzeroberfläche
+- `batch_app.py`: Enthält die Funktionalität für Batch-Tests
+- `models/`: Enthält alle Kernmodule für die Simulation
+  - `acoustic_simulation.py`: Kernmodul für die akustische Simulation
+  - `database.py`: Datenbankfunktionalität
+  - `material_database.py`: Verwaltung der Materialeigenschaften
+  - `source_configurations.py`: Konfiguration akustischer Quellen
+- `utils/`: Hilfsfunktionen und -module
+- `experimental_data/`: Enthält experimentelle Datensätze für verschiedene Materialien
+
+## Datenbank-Konfiguration
+
+SONARES verwendet PostgreSQL für die Datenspeicherung. Die Datenbank-Verbindungsparameter werden über Umgebungsvariablen konfiguriert:
+
+```
+DATABASE_URL=postgresql://username:password@localhost:5432/sonares_db
+```
+
+Wenn keine Datenbankverbindung verfügbar ist, verwendet die Anwendung einen Fallback-Modus mit lokaler Speicherung.
 
 ## Lizenz
 
